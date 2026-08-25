@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>功能管理</title>
+<style>
+  :root {
+    --bg: #f4f7f9;
+    --card: #ffffff;
+    --card-border: #e8ecf1;
+    --text: #1f2329;
+    --text-secondary: #8a919f;
+    --primary: #1677ff;
+    --primary-hover: #4096ff;
+    --danger: #f5222d;
+    --danger-hover: #ff4d4f;
+    --success: #22c55e;
+    --shadow: 0 1px 2px rgba(0, 21, 41, 0.06), 0 1px 4px rgba(0, 21, 41, 0.04);
+    --radius: 10px;
+    --input-bg: transparent;
+    --input-border: #d9d9d9;
+  }
+  html[data-theme="dark"] {
+    --bg: #2c344a;
+    --card: #1e2436;
+    --card-border: #2f3a55;
+    --text: rgba(255, 255, 255, 0.85);
+    --text-secondary: rgba(255, 255, 255, 0.55);
+    --primary: #1668dc;
+    --primary-hover: #3c89e8;
+    --danger: #dc4446;
+    --danger-hover: #f75959;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --input-border: #3a4564;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .page-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 20px;
+  }
+  .page-header h1 {
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  .page-header .subtitle {
+    margin-top: 4px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    color: var(--primary);
+    cursor: pointer;
+    text-decoration: none;
+    margin-bottom: 8px;
+  }
+  .back-link:hover { color: var(--primary-hover); }
+  .btn {
+    border: none;
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+  }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: var(--primary-hover); }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-danger:hover { background: var(--danger-hover); }
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--input-border);
+    color: var(--text);
+  }
+  .btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 14px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 16px;
+    transition: box-shadow 0.2s, border-color 0.2s;
+  }
+  .card.clickable { cursor: pointer; }
+  .card.clickable:hover {
+    border-color: var(--primary);
+    box-shadow: 0 4px 12px rgba(0, 21, 41, 0.12);
+  }
+  .plugin-head { display: flex; align-items: center; }
+  .plugin-icon {
+    width: 34px; height: 34px;
+    border-radius: 8px;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: rgba(22, 119, 255, 0.1);
+    color: var(--primary);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 600;
+  }
+  .plugin-name {
+    font-size: 15px; font-weight: 600;
+    margin-left: 12px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .plugin-desc {
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    height: 40px;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .plugin-meta {
+    margin-top: 12px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 12px; color: var(--text-secondary);
+  }
+  .plugin-meta .author {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: calc(100% - 90px);
+  }
+  .badge {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    background: rgba(22, 119, 255, 0.1);
+    color: var(--primary);
+  }
+  .feature-head { display: flex; align-items: center; }
+  .feature-avatar {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    background: rgba(22, 119, 255, 0.1);
+    color: var(--primary);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 600;
+    flex-shrink: 0;
+  }
+  .feature-info { margin-left: 12px; min-width: 0; }
+  .feature-name {
+    font-size: 14px; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .feature-command {
+    font-size: 12px; color: var(--text-secondary);
+    margin-top: 2px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .feature-perm { margin-left: auto; flex-shrink: 0; font-size: 12px; color: var(--text-secondary); }
+  .controls {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .control label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+  }
+  .control select, .control input {
+    width: 100%;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 5px 8px;
+    font-size: 13px;
+    outline: none;
+  }
+  .control select:focus, .control input:focus { border-color: var(--primary); }
+  .feature-foot {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--card-border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .feature-msg { font-size: 12px; }
+  .state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+  .state.error { color: var(--danger); }
+  .view { display: none; }
+  .view.active { display: block; }
+  @media (max-width: 640px) {
+    .controls { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+  <div id="app">
+    <div id="view-overview" class="view">
+      <header class="page-header">
+        <div>
+          <h1>功能管理</h1>
+          <p class="subtitle" id="overview-subtitle">正在加载…</p>
+        </div>
+        <button class="btn btn-ghost" id="btn-refresh">刷新</button>
+      </header>
+      <div id="overview-grid" class="card-grid"></div>
+    </div>
+
+    <div id="view-detail" class="view">
+      <header class="page-header">
+        <div>
+          <a class="back-link" id="btn-back">‹ 返回功能管理</a>
+          <h1 id="detail-title">功能编辑</h1>
+          <p class="subtitle" id="detail-subtitle"></p>
+        </div>
+        <button class="btn btn-ghost" id="btn-refresh-detail">刷新</button>
+      </header>
+      <div id="detail-grid" class="card-grid"></div>
+    </div>
+
+    <div id="loading" class="state">正在加载功能列表…</div>
+    <div id="error" class="state error" style="display:none"></div>
+  </div>
+
+<script>
+(function () {
+  'use strict'
+
+  // 暗色模式跟随锅巴设置
+  try {
+    if (localStorage.getItem('__APP__DARK__MODE__') === 'dark') {
+      document.documentElement.setAttribute('data-theme', 'dark')
+    }
+  } catch (e) {}
+
+  var state = { groups: [], features: [], plugins: [] }
+
+  function getApiBase() {
+    var p = location.pathname
+    var idx = p.lastIndexOf('/')
+    return (idx > 0 ? p.slice(0, idx) : '') + '/api'
+  }
+
+  // 兼容令牌可能的包装形态：直接 JWT 字符串，或 { value/token, ... } 对象
+  function _unwrapToken(t) {
+    if (!t) return ''
+    if (typeof t === 'string') return t
+    if (typeof t === 'object') return (t.value || t.token || '') || ''
+    return ''
+  }
+
+  function getToken() {
+    // 0) 优先：父组件拼到 URL 上的 ?token=
+    try {
+      var up = new URLSearchParams(location.search).get('token')
+      if (up) return up
+    } catch (e) {}
+    // 1) 插件 SPA 实际使用的 Persistent 存储（defHttp 拦截器读的正是这里）：
+    //    localStorage[GUOBAPLUGINWEB__PRODUCTION__1.0.0__COMMON__LOCAL__KEY__][TOKEN__]
+    try {
+      var pl = JSON.parse(
+        localStorage.getItem('GUOBAPLUGINWEB__PRODUCTION__1.0.0__COMMON__LOCAL__KEY__') || '{}') || {}
+      var tl = _unwrapToken(pl.TOKEN__) || _unwrapToken(pl.token)
+      if (tl) return tl
+    } catch (e) {}
+    // 2) 同一命名的 Persistent 会话存储
+    try {
+      var ps = JSON.parse(
+        (sessionStorage || { getItem: function () { return null } })
+          .getItem('GUOBAPLUGINWEB__PRODUCTION__1.0.0__COMMON__SESSION__KEY__') || '{}') || {}
+      var ts = _unwrapToken(ps.TOKEN__) || _unwrapToken(ps.token)
+      if (ts) return ts
+    } catch (e) {}
+    // 3) 老名命名的 COMMON 存储
+    try {
+      var po = JSON.parse(window.localStorage.getItem('COMMON__LOCAL__KEY__') || '{}') || {}
+      var to = _unwrapToken(po.TOKEN__) || _unwrapToken(po.token)
+      if (to) return to
+    } catch (e) {}
+    // 4) guoba:token（可能为过期残留，最后兜底）
+    try {
+      return _unwrapToken(localStorage.getItem('guoba:token'))
+    } catch (e) { return '' }
+  }
+
+  // ---- 数据获取：优先走父页面桥（父页面用插件自带 defHttp 自动带令牌，无需手动 token）；
+  // 仅当独立打开本页（无父页面）时才回退到原生 fetch ----
+  var __bridgeOk = !!(window.parent && window.parent !== window)
+  var __pending = {}
+  var __reqId = 0
+  var __bridgeTimeout = {}
+
+  function api(path, opts) {
+    opts = opts || {}
+    if (__bridgeOk) {
+      var id = ++__reqId
+      window.parent.postMessage({
+        __fm: true, type: 'request', id: id,
+        method: opts.method || 'GET', url: path,
+        body: opts.body || undefined,
+      }, '*')
+      return new Promise(function (resolve, reject) {
+        __pending[id] = { resolve: resolve, reject: reject }
+        __bridgeTimeout[id] = setTimeout(function () {
+          if (__pending[id]) {
+            delete __pending[id]; delete __bridgeTimeout[id]
+            reject(new Error('请求超时'))
+          }
+        }, 30000)
+      })
+    }
+    return nativeFetch(path, opts)
+  }
+
+  function nativeFetch(path, opts) {
+    var headers = { 'Content-Type': 'application/json' }
+    var token = getToken()
+    if (token) headers['guoba-access-token'] = token
+    return window.fetch(getApiBase() + path, {
+      method: opts.method || 'GET',
+      headers: headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    }).then(function (res) {
+      return res.json().catch(function () { return {} }).then(function (data) {
+        if (res.status === 401 || data.code === 401) throw new Error('登录已失效，请重新登录')
+        if (!data.ok || data.code !== 0) throw new Error(data.message || ('请求失败 (' + res.status + ')'))
+        return data.result
+      })
+    })
+  }
+
+  window.addEventListener('message', function (e) {
+    var d = e.data
+    if (!d || !d.__fm || d.type !== 'reply') return
+    var item = __pending[d.id]
+    if (!item) return
+    delete __pending[d.id]
+    if (__bridgeTimeout[d.id]) { clearTimeout(__bridgeTimeout[d.id]); delete __bridgeTimeout[d.id] }
+    if (d.ok) item.resolve(d.result)
+    else item.reject(new Error(d.error || '请求失败'))
+  })
+
+  function el(tag, cls, text) {
+    var node = document.createElement(tag)
+    if (cls) node.className = cls
+    if (text != null) node.textContent = text
+    return node
+  }
+
+  function showLoading() {
+    document.getElementById('loading').style.display = 'block'
+    document.getElementById('error').style.display = 'none'
+    document.querySelectorAll('.view').forEach(function (v) { v.classList.remove('active') })
+  }
+
+  function showError(msg) {
+    document.getElementById('loading').style.display = 'none'
+    var err = document.getElementById('error')
+    err.style.display = 'block'
+    err.textContent = msg
+    document.querySelectorAll('.view').forEach(function (v) { v.classList.remove('active') })
+  }
+
+  function showView(id) {
+    document.getElementById('loading').style.display = 'none'
+    document.getElementById('error').style.display = 'none'
+    document.querySelectorAll('.view').forEach(function (v) { v.classList.remove('active') })
+    document.getElementById(id).classList.add('active')
+  }
+
+  function pluginIconHtml(g) {
+    if (g.iconPath) {
+      return '<img class="plugin-icon" src="' + g.iconPath + '" alt="">'
+    }
+    var ch = String(g.title || g.name || '?').charAt(0).toUpperCase()
+    return '<div class="plugin-icon">' + ch + '</div>'
+  }
+
+  function renderOverview() {
+    var grid = document.getElementById('overview-grid')
+    grid.innerHTML = ''
+    var total = state.groups.reduce(function (s, g) { return s + g.features.length }, 0)
+    document.getElementById('overview-subtitle').textContent =
+      '共 ' + state.groups.length + ' 个插件 / ' + total + ' 项功能'
+
+    if (state.groups.length === 0) {
+      grid.appendChild(el('div', 'state', '暂无功能数据'))
+      return
+    }
+
+    state.groups.forEach(function (g) {
+      var card = el('div', 'card clickable')
+      card.innerHTML =
+        '<div class="plugin-head">' + pluginIconHtml(g) +
+        '<span class="plugin-name" title="' + (g.title || g.name) + '">' + esc(g.title || g.name) + '</span></div>' +
+        '<div class="plugin-desc">' + esc(g.desc || '暂无描述') + '</div>' +
+        '<div class="plugin-meta"><span class="author">' + esc(g.author || '未知') + '</span>' +
+        '<span class="badge">' + g.features.length + ' 项功能</span></div>'
+      card.addEventListener('click', function () {
+        location.hash = '#/plugin/' + encodeURIComponent(g.plugin)
+      })
+      grid.appendChild(card)
+    })
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    })
+  }
+
+  function loadOverview() {
+    showLoading()
+    Promise.all([
+      api('/feature-policy/scan').catch(function () { return [] }),
+      api('/plugin/list').catch(function () { return [] }),
+    ]).then(function (res) {
+      var feats = res[0] || []
+      var plugins = res[1] || []
+      var pMap = {}
+      plugins.forEach(function (p) {
+        pMap[String(p.name || '').toLowerCase()] = p
+        if (p.title) pMap[String(p.title || '').toLowerCase()] = p
+      })
+      var map = {}
+      feats.forEach(function (f) {
+        var key = f.plugin || f.pluginName
+        var g = map[key] || (map[key] = { plugin: key, name: f.pluginName || key, features: [] })
+        g.features.push(f)
+      })
+      var groups = Object.keys(map).map(function (k) { return map[k] })
+      groups.forEach(function (g) {
+        var meta = pMap[String(g.plugin).toLowerCase()] || pMap[String(g.name).toLowerCase()]
+        if (meta) {
+          g.iconPath = meta.iconPath
+          g.icon = meta.icon
+          g.iconColor = meta.iconColor
+          g.desc = meta.description
+          g.author = Array.isArray(meta.author) ? meta.author.join(' ') : meta.author
+          g.title = meta.title || g.name
+        }
+      })
+      groups.sort(function (a, b) {
+        return String(a.title || a.name).localeCompare(String(b.title || b.name))
+      })
+      state.groups = groups
+      showView('view-overview')
+      renderOverview()
+    }).catch(function (e) {
+      showError('加载失败：' + (e && e.message ? e.message : e))
+    })
+  }
+
+  function defaultPolicy() {
+    return { status: 'enabled', mode: 'blacklist', groups: [], permission: 'inherit' }
+  }
+
+  function renderDetail(key) {
+    var grid = document.getElementById('detail-grid')
+    grid.innerHTML = ''
+    var list = state.features.filter(function (f) { return (f.plugin || f.pluginName) === key })
+    var meta = state.plugins.find(function (p) {
+      return String(p.name || '').toLowerCase() === String(key).toLowerCase() ||
+        String(p.title || '').toLowerCase() === String(key).toLowerCase()
+    })
+    document.getElementById('detail-title').textContent = (meta && meta.title) || key
+    document.getElementById('detail-subtitle').textContent = list.length + ' 项功能'
+
+    if (list.length === 0) {
+      grid.appendChild(el('div', 'state', '该插件暂无功能'))
+      return
+    }
+
+    list.forEach(function (f) {
+      var policy = Object.assign(defaultPolicy(), f.policy || {})
+      f._policy = policy
+      f._groupsInput = (policy.groups || []).join(',')
+
+      var card = el('div', 'card')
+      var permText = { inherit: '继承原权限', all: '所有人', admin: '群管理员', owner: '群主', master: '机器人主人' }[policy.permission] || policy.permission
+      card.innerHTML =
+        '<div class="feature-head">' +
+        '<div class="feature-avatar">' + esc(String(f.name || f.function || '?').charAt(0).toUpperCase()) + '</div>' +
+        '<div class="feature-info">' +
+        '<div class="feature-name" title="' + esc(f.name) + '">' + esc(f.name) + '</div>' +
+        (f.command ? '<div class="feature-command" title="' + esc(f.command) + '">' + esc(f.command) + '</div>' : '') +
+        '</div>' +
+        '<span class="feature-perm">默认权限: ' + esc(f.permission || 'all') + '</span>' +
+        '</div>' +
+        '<div class="controls">' +
+        '<div class="control"><label>状态</label><select data-field="status">' +
+        '<option value="enabled">启用</option><option value="disabled">停用</option></select></div>' +
+        '<div class="control"><label>名单模式</label><select data-field="mode">' +
+        '<option value="blacklist">群黑名单</option><option value="whitelist">群白名单</option></select></div>' +
+        '<div class="control"><label>群号（逗号分隔，留空=不限）</label><input data-field="groups" placeholder="群号，逗号分隔"></div>' +
+        '<div class="control"><label>权限</label><select data-field="permission">' +
+        '<option value="inherit">继承原权限</option><option value="all">所有人</option>' +
+        '<option value="admin">群管理员</option><option value="owner">群主</option>' +
+        '<option value="master">机器人主人</option></select></div>' +
+        '</div>' +
+        '<div class="feature-foot">' +
+        '<button class="btn btn-primary" data-act="save">保存</button>' +
+        '<button class="btn btn-danger" data-act="reset">恢复默认</button>' +
+        '<span class="feature-msg"></span>' +
+        '</div>'
+
+      var selStatus = card.querySelector('[data-field="status"]')
+      var selMode = card.querySelector('[data-field="mode"]')
+      var inpGroups = card.querySelector('[data-field="groups"]')
+      var selPerm = card.querySelector('[data-field="permission"]')
+      selStatus.value = policy.status
+      selMode.value = policy.mode
+      inpGroups.value = f._groupsInput
+      selPerm.value = policy.permission
+
+      var msgEl = card.querySelector('.feature-msg')
+      function setMsg(text, color) {
+        msgEl.textContent = text
+        msgEl.style.color = color || ''
+      }
+
+      card.querySelector('[data-act="save"]').addEventListener('click', function () {
+        var body = {
+          status: selStatus.value,
+          mode: selMode.value,
+          groups: String(inpGroups.value || '').split(',').map(function (x) { return x.trim() }).filter(Boolean).map(Number),
+          permission: selPerm.value,
+        }
+        var btn = card.querySelector('[data-act="save"]')
+        btn.disabled = true
+        btn.textContent = '保存中…'
+        api('/feature-policy/rules/' + encodeURIComponent(f.key), { method: 'PUT', body: body })
+          .then(function () { setMsg('已保存', '#22c55e') })
+          .catch(function (e) { setMsg(e.message || '保存失败', '#f5222d') })
+          .finally(function () { btn.disabled = false; btn.textContent = '保存' })
+      })
+
+      card.querySelector('[data-act="reset"]').addEventListener('click', function () {
+        var btn = card.querySelector('[data-act="reset"]')
+        btn.disabled = true
+        api('/feature-policy/rules/' + encodeURIComponent(f.key), { method: 'DELETE' })
+          .then(function () {
+            selStatus.value = 'enabled'
+            selMode.value = 'blacklist'
+            inpGroups.value = ''
+            selPerm.value = 'inherit'
+            setMsg('已恢复默认', '#22c55e')
+          })
+          .catch(function (e) { setMsg(e.message || '操作失败', '#f5222d') })
+          .finally(function () { btn.disabled = false })
+      })
+
+      grid.appendChild(card)
+    })
+  }
+
+  function loadDetail(key) {
+    showLoading()
+    Promise.all([
+      api('/feature-policy/scan').catch(function () { return [] }),
+      api('/plugin/list').catch(function () { return [] }),
+    ]).then(function (res) {
+      state.features = res[0] || []
+      state.plugins = res[1] || []
+      showView('view-detail')
+      renderDetail(key)
+    }).catch(function (e) {
+      showError('加载失败：' + (e && e.message ? e.message : e))
+    })
+  }
+
+  function route() {
+    var hash = location.hash || '#/'
+    var m = hash.match(/^#\/plugin\/(.+)$/)
+    if (m) {
+      var key = decodeURIComponent(m[1])
+      loadDetail(key)
+    } else {
+      loadOverview()
+    }
+  }
+
+  document.getElementById('btn-refresh').addEventListener('click', loadOverview)
+  document.getElementById('btn-refresh-detail').addEventListener('click', function () {
+    var m = location.hash.match(/^#\/plugin\/(.+)$/)
+    if (m) loadDetail(decodeURIComponent(m[1]))
+  })
+  document.getElementById('btn-back').addEventListener('click', function () {
+    location.hash = '#/'
+  })
+
+  window.addEventListener('hashchange', route)
+  route()
+})()
+</script>
+</body>
+</html>
