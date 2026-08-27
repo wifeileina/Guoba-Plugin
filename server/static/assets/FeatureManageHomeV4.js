@@ -63,7 +63,17 @@ const _css = '' +
   '.fm-policy-state.dirty{color:#f0433c}' +
   '.fm-reset{background:transparent;color:#f0433c;border:1px solid #f0433c;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px}' +
   '.fm-reset:disabled{opacity:.5;cursor:not-allowed}' +
-  '.fm-msg{font-size:12px;margin-left:6px}'
+  '.fm-msg{font-size:12px;margin-left:6px}' +
+  '.fm-plugin-policy{grid-column:1/-1;background:#f8faff;border:1px solid #dfe6ff;border-radius:10px;padding:12px 14px;margin-bottom:4px}' +
+  '#fm-root[data-theme="dark"] .fm-plugin-policy{background:#232936;border-color:#3a414c}' +
+  '.fm-pp-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}' +
+  '.fm-pp-title{font-weight:600;font-size:13px}' +
+  '.fm-pp-sub{color:#8a919f;font-size:11px;flex:1;min-width:0}' +
+  '.fm-pp-controls{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}' +
+  '.fm-pp-badge{margin:6px 0 10px;display:inline-block;background:#eef2ff;color:#4c6fff;border-radius:20px;padding:2px 10px;font-size:11px}' +
+  '#fm-root[data-theme="dark"] .fm-pp-badge{background:#343d5a;color:#9db2ff}' +
+  '.fm-save{background:#4c6fff;color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px}' +
+  '.fm-save:disabled{opacity:.5;cursor:not-allowed}'
 
 function _esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -82,6 +92,7 @@ const _sfc_main = defineComponent({
   setup() {
     let groups = []
     let plugins = []
+    let groupOptions = []
     let mode = 'overview'
     let currentKey = null
     let search = ''
@@ -290,11 +301,13 @@ const _sfc_main = defineComponent({
         const hitLine = hits.length
           ? '<div class="fm-hit" title="' + _esc(hits.join('、')) + '">命中 ' + hits.length + ' 项：' + _esc(hits.slice(0, 2).join('、') + (hits.length > 2 ? '…' : '')) + '</div>'
           : ''
+        const pp = g.pluginPolicy && !policyEquals(g.pluginPolicy, defaultPolicy())
         return '<div class="fm-card" data-k="' + _esc(g.plugin) + '">' +
           '<div class="fm-card-head">' + avHtml(g) +
           '<div class="fm-name" title="' + _esc(g.title || g.name) + '">' + _esc(g.title || g.name) + '</div></div>' +
           '<div class="fm-desc">' + _esc(g.desc || '暂无描述') + '</div>' +
           hitLine +
+          (pp ? '<div class="fm-pp-badge">已设插件级配置</div>' : '') +
           '<div class="fm-meta"><span>' + _esc(g.author || '未知') + '</span>' +
           '<span class="fm-badge">' + groupCmdCount(g) + ' 条指令</span></div></div>'
       }).join('')
@@ -305,18 +318,29 @@ const _sfc_main = defineComponent({
     }
 
     function defaultPolicy() {
-      return { status: 'enabled', mode: 'blacklist', groups: [], permission: 'inherit' }
+      return { status: 'enabled', blackGroup: [], whiteGroup: [], blackUser: [], whiteUser: [], permission: 'inherit' }
     }
 
     function normalizePolicy(value) {
       const base = defaultPolicy()
       const src = value || {}
+      const toList = function (arr) {
+        return Array.isArray(arr) ? arr.map(Number).filter(Number.isSafeInteger) : []
+      }
+      let blackGroup = toList(src.blackGroup)
+      let whiteGroup = toList(src.whiteGroup)
+      // 旧字段兼容：mode + groups（单组模式）
+      if (src.mode && !blackGroup.length && !whiteGroup.length) {
+        const g = toList(src.groups)
+        if (src.mode === 'blacklist') blackGroup = g
+        else if (src.mode === 'whitelist') whiteGroup = g
+      }
       return {
         status: src.status === 'disabled' ? 'disabled' : base.status,
-        mode: src.mode === 'whitelist' ? 'whitelist' : base.mode,
-        groups: Array.isArray(src.groups)
-          ? src.groups.map(Number).filter(Number.isSafeInteger)
-          : [],
+        blackGroup,
+        whiteGroup,
+        blackUser: toList(src.blackUser),
+        whiteUser: toList(src.whiteUser),
         permission: ['inherit', 'all', 'admin', 'owner', 'master'].includes(src.permission)
           ? src.permission
           : base.permission,
@@ -327,20 +351,27 @@ const _sfc_main = defineComponent({
       const left = normalizePolicy(a)
       const right = normalizePolicy(b)
       return left.status === right.status &&
-        left.mode === right.mode &&
         left.permission === right.permission &&
-        left.groups.join(',') === right.groups.join(',')
+        left.blackGroup.join(',') === right.blackGroup.join(',') &&
+        left.whiteGroup.join(',') === right.whiteGroup.join(',') &&
+        left.blackUser.join(',') === right.blackUser.join(',') &&
+        left.whiteUser.join(',') === right.whiteUser.join(',')
     }
 
     function policyFromRow(row) {
-      return normalizePolicy({
-        status: row.querySelector('[data-f="status"]').value,
-        mode: row.querySelector('[data-f="mode"]').value,
-        groups: String(row.querySelector('[data-f="groups"]').value || '')
+      const toList = function (name) {
+        return String(row.querySelector('[data-f="' + name + '"]').value || '')
           .split(',')
           .map(function (x) { return x.trim() })
           .filter(Boolean)
-          .map(Number),
+          .map(Number)
+      }
+      return normalizePolicy({
+        status: row.querySelector('[data-f="status"]').value,
+        blackGroup: toList('blackGroup'),
+        whiteGroup: toList('whiteGroup'),
+        blackUser: toList('blackUser'),
+        whiteUser: toList('whiteUser'),
         permission: row.querySelector('[data-f="permission"]').value,
       })
     }
@@ -363,16 +394,138 @@ const _sfc_main = defineComponent({
     function setRowPolicy(row, policy) {
       const value = normalizePolicy(policy)
       row.querySelector('[data-f="status"]').value = value.status
-      row.querySelector('[data-f="mode"]').value = value.mode
-      row.querySelector('[data-f="groups"]').value = value.groups.join(',')
+      row.querySelector('[data-f="blackGroup"]').value = value.blackGroup.join(',')
+      row.querySelector('[data-f="whiteGroup"]').value = value.whiteGroup.join(',')
+      row.querySelector('[data-f="blackUser"]').value = value.blackUser.join(',')
+      row.querySelector('[data-f="whiteUser"]').value = value.whiteUser.join(',')
       row.querySelector('[data-f="permission"]').value = value.permission
+    }
+
+    function ensureGroupDatalist() {
+      let dl = document.getElementById('fm-group-datalist')
+      if (!dl) {
+        dl = document.createElement('datalist')
+        dl.id = 'fm-group-datalist'
+        document.body.appendChild(dl)
+      }
+      dl.innerHTML = groupOptions.map(function (it) {
+        return '<option value="' + _esc(String(it.group_id)) + '">' + _esc(String(it.group_id) + ' - ' + (it.group_name || '')) + '</option>'
+      }).join('')
+    }
+
+    function renderPluginPanel(g) {
+      const p = normalizePolicy(g.pluginPolicy || null)
+      const custom = g.pluginPolicy && !policyEquals(g.pluginPolicy, defaultPolicy())
+      return '<div class="fm-plugin-policy" data-pp="1">' +
+        '<div class="fm-pp-head"><span class="fm-pp-title">插件总配置</span>' +
+        '<span class="fm-pp-sub">应用于本插件所有功能，单个功能配置可覆盖此配置</span>' +
+        '<span class="fm-policy-state" data-state="pp">' + (g.pluginDirty ? '未保存' : (custom ? '自定义' : '')) + '</span></div>' +
+        '<div class="fm-pp-controls">' +
+        '<label class="fm-chip">状态<select data-p="status"><option value="enabled">启用</option><option value="disabled">停用</option></select></label>' +
+        '<label class="fm-chip">黑名单群<input data-p="blackGroup" list="fm-group-datalist" placeholder="黑名单群号，输入检索选择"></label>' +
+        '<label class="fm-chip">白名单群<input data-p="whiteGroup" list="fm-group-datalist" placeholder="白名单群号，输入检索选择"></label>' +
+        '<label class="fm-chip">黑名单用户<input data-p="blackUser" placeholder="黑名单QQ，逗号分隔"></label>' +
+        '<label class="fm-chip">白名单用户<input data-p="whiteUser" placeholder="白名单QQ，逗号分隔"></label>' +
+        '<label class="fm-chip">权限<select data-p="permission"><option value="inherit">继承原权限</option><option value="all">所有人</option>' +
+        '<option value="admin">群管理员</option><option value="owner">群主</option><option value="master">机器人主人</option></select></label>' +
+        '<div class="fm-pp-actions"><button class="fm-save" data-act="pp-save">保存</button>' +
+        '<button class="fm-reset" data-act="pp-reset">恢复默认</button>' +
+        '<span class="fm-msg" data-msg="pp"></span></div>' +
+        '</div></div>'
+    }
+
+    function policyFromPanel(panel) {
+      const toList = function (name) {
+        return String(panel.querySelector('[data-p="' + name + '"]').value || '')
+          .split(',')
+          .map(function (x) { return x.trim() })
+          .filter(Boolean)
+          .map(Number)
+      }
+      return normalizePolicy({
+        status: panel.querySelector('[data-p="status"]').value,
+        blackGroup: toList('blackGroup'),
+        whiteGroup: toList('whiteGroup'),
+        blackUser: toList('blackUser'),
+        whiteUser: toList('whiteUser'),
+        permission: panel.querySelector('[data-p="permission"]').value,
+      })
+    }
+
+    function setPluginPanel(panel, policy) {
+      const value = normalizePolicy(policy)
+      panel.querySelector('[data-p="status"]').value = value.status
+      panel.querySelector('[data-p="blackGroup"]').value = value.blackGroup.join(',')
+      panel.querySelector('[data-p="whiteGroup"]').value = value.whiteGroup.join(',')
+      panel.querySelector('[data-p="blackUser"]').value = value.blackUser.join(',')
+      panel.querySelector('[data-p="whiteUser"]').value = value.whiteUser.join(',')
+      panel.querySelector('[data-p="permission"]').value = value.permission
+    }
+
+    function markPluginDraft(g) {
+      const panel = document.querySelector('#fm-detail .fm-plugin-policy')
+      if (!panel) return
+      g.pluginDraft = policyFromPanel(panel)
+      g.pluginDirty = !policyEquals(g.pluginDraft, g.pluginPolicy || defaultPolicy())
+      const state = panel.querySelector('[data-state="pp"]')
+      if (state) {
+        state.textContent = g.pluginDirty ? '未保存' : (g.pluginPolicy && !policyEquals(g.pluginPolicy, defaultPolicy()) ? '自定义' : '')
+        state.className = 'fm-policy-state' + (g.pluginDirty ? ' dirty' : '')
+      }
+    }
+
+    function savePluginPolicy(g) {
+      const panel = document.querySelector('#fm-detail .fm-plugin-policy')
+      if (!panel) return Promise.resolve()
+      const body = policyFromPanel(panel)
+      const btn = panel.querySelector('[data-act="pp-save"]')
+      const msgEl = panel.querySelector('[data-msg="pp"]')
+      if (btn) { btn.disabled = true; btn.textContent = '保存中…' }
+      const request = policyEquals(body, defaultPolicy())
+        ? defHttp.delete({ url: '/feature-policy/rules/' + encodeURIComponent(g.plugin) })
+        : defHttp.put({ url: '/feature-policy/rules/' + encodeURIComponent(g.plugin), data: body })
+      return request.then(function () {
+        g.pluginPolicy = policyEquals(body, defaultPolicy()) ? null : body
+        g.pluginDraft = null
+        g.pluginDirty = false
+        if (msgEl) { msgEl.textContent = '已保存'; msgEl.style.color = '#22c55e' }
+        const state = panel.querySelector('[data-state="pp"]')
+        if (state) { state.textContent = g.pluginPolicy ? '自定义' : ''; state.className = 'fm-policy-state' }
+      }).catch(function (e) {
+        if (msgEl) { msgEl.textContent = (e && e.message) || '保存失败'; msgEl.style.color = '#f0433c' }
+        throw e
+      }).finally(function () {
+        if (btn) { btn.disabled = false; btn.textContent = '保存' }
+      })
+    }
+
+    function resetPluginPolicy(g) {
+      const panel = document.querySelector('#fm-detail .fm-plugin-policy')
+      if (!panel) return Promise.resolve()
+      setPluginPanel(panel, defaultPolicy())
+      markPluginDraft(g)
+      return savePluginPolicy(g)
+    }
+
+    function bindPluginPanel(g) {
+      const panel = document.querySelector('#fm-detail .fm-plugin-policy')
+      if (!panel) return
+      setPluginPanel(panel, g.pluginDraft || g.pluginPolicy || null)
+      Array.prototype.forEach.call(panel.querySelectorAll('[data-p]'), function (ctl) {
+        ctl.addEventListener('input', function () { markPluginDraft(g) })
+        ctl.addEventListener('change', function () { markPluginDraft(g) })
+      })
+      const save = panel.querySelector('[data-act="pp-save"]')
+      if (save) save.addEventListener('click', function () { savePluginPolicy(g) })
+      const reset = panel.querySelector('[data-act="pp-reset"]')
+      if (reset) reset.addEventListener('click', function () { resetPluginPolicy(g) })
     }
 
     function saveCurrentDetail() {
       const g = groups.filter(function (x) { return x.plugin === currentKey })[0]
       if (!g) return Promise.resolve()
       const dirty = (g.features || []).filter(function (f) { return f._dirty })
-      if (!dirty.length) return Promise.resolve()
+      if (!dirty.length && !g.pluginDirty) return Promise.resolve()
 
       const btn = document.getElementById('fm-btn')
       if (btn) { btn.disabled = true; btn.textContent = '保存中…' }
@@ -381,12 +534,14 @@ const _sfc_main = defineComponent({
         rows[row.getAttribute('data-key')] = row
       })
 
-      return Promise.all(dirty.map(function (feature) {
+      const tasks = []
+      if (g.pluginDirty) tasks.push(savePluginPolicy(g))
+      dirty.forEach(function (feature) {
         const body = normalizePolicy(feature._draft)
         const request = policyEquals(body, defaultPolicy())
           ? defHttp.delete({ url: '/feature-policy/rules/' + encodeURIComponent(feature.key) })
           : defHttp.put({ url: '/feature-policy/rules/' + encodeURIComponent(feature.key), data: body })
-        return request.then(function () {
+        tasks.push(request.then(function () {
           feature.policy = policyEquals(body, defaultPolicy()) ? null : body
           feature._draft = null
           feature._dirty = false
@@ -401,15 +556,16 @@ const _sfc_main = defineComponent({
             if (msg) { msg.textContent = (e && e.message) || '保存失败'; msg.style.color = '#f0433c' }
           }
           throw e
-        })
-      })).finally(function () {
+        }))
+      })
+      return Promise.all(tasks).finally(function () {
         if (btn) { btn.disabled = false; btn.textContent = '保存' }
       })
     }
 
     function renderDetail(key) {
       const g = groups.filter(function (x) { return x.plugin === key })[0] ||
-        { title: key, features: [] }
+        { plugin: key, title: key, features: [] }
       document.querySelector('#fm-detail-wrap #fm-big').textContent = (g && g.title) || key
       const q = dsearch.trim().toLowerCase()
       const list = q ? g.features.filter(function (f) { return featureMatch(f, q) }) : g.features
@@ -419,7 +575,7 @@ const _sfc_main = defineComponent({
       const rows = list.map(function (f) {
         const policy = Object.assign(defaultPolicy(), f.policy || {})
         f._policy = policy
-        f._groups = (policy.groups || []).join(',')
+        f._groups = (policy.blackGroup || []).join(',')
         const hit = q ? ' hit' : ''
         return '<div class="fm-row' + hit + '" data-key="' + _esc(f.key) + '">' +
           '<div class="fm-row-head"><div class="fm-fav">' + _esc(String(f.name || f.function || '?').charAt(0).toUpperCase()) + '</div>' +
@@ -428,14 +584,19 @@ const _sfc_main = defineComponent({
           '</div>' +
           '<div class="fm-row-controls">' +
           '<label class="fm-chip">状态<select data-f="status"><option value="enabled">启用</option><option value="disabled">停用</option></select></label>' +
-          '<label class="fm-chip">名单模式<select data-f="mode"><option value="blacklist">群黑名单</option><option value="whitelist">群白名单</option></select></label>' +
-          '<label class="fm-chip">群号(逗号分隔)<input data-f="groups" placeholder="群号，逗号分隔"></label>' +
+          '<label class="fm-chip">黑名单群<input data-f="blackGroup" list="fm-group-datalist" placeholder="黑名单群号，输入检索选择"></label>' +
+          '<label class="fm-chip">白名单群<input data-f="whiteGroup" list="fm-group-datalist" placeholder="白名单群号，输入检索选择"></label>' +
+          '<label class="fm-chip">黑名单用户<input data-f="blackUser" placeholder="黑名单QQ，逗号分隔"></label>' +
+          '<label class="fm-chip">白名单用户<input data-f="whiteUser" placeholder="白名单QQ，逗号分隔"></label>' +
           '<label class="fm-chip">权限<select data-f="permission"><option value="inherit">继承原权限</option><option value="all">所有人</option>' +
           '<option value="admin">群管理员</option><option value="owner">群主</option><option value="master">机器人主人</option></select></label>' +
           '<div class="fm-actions"><span class="fm-policy-state" data-state="policy"></span>' +
           '<button class="fm-reset" data-act="reset">恢复默认</button><span class="fm-msg"></span></div></div></div>'
       }).join('')
-      document.getElementById('fm-detail').innerHTML = rows || ('<div class="fm-state">' + (q ? '本插件没有匹配的指令' : '该插件暂无功能') + '</div>')
+      ensureGroupDatalist()
+      const body = renderPluginPanel(g) + (rows || ('<div class="fm-state">' + (q ? '本插件没有匹配的指令' : '该插件暂无功能') + '</div>'))
+      document.getElementById('fm-detail').innerHTML = body
+      bindPluginPanel(g)
       Array.prototype.forEach.call(document.querySelectorAll('#fm-detail .fm-row'), function (row) {
         const feature = g.features.find(function (f) { return f.key === row.getAttribute('data-key') })
         if (!feature) return
@@ -496,9 +657,21 @@ const _sfc_main = defineComponent({
       Promise.all([
         defHttp.get({ url: '/feature-policy/scan' }).catch(function () { return [] }),
         defHttp.get({ url: '/plugin/list' }).catch(function () { return [] }),
+        defHttp.get({ url: '/feature-policy/rules' }).catch(function () { return {} }),
+        defHttp.get({ url: '/feature-policy/groups' }).catch(function () { return [] }),
       ]).then(function (res) {
         plugins = _asArray(res[1])
         const feats = _asArray(res[0])
+        const allRules = res[2] || {}
+        groupOptions = _asArray(res[3]).map(function (it) {
+          return { group_id: it.group_id, group_name: it.group_name || '' }
+        })
+        ensureGroupDatalist()
+        // 规则键不含 ":" 的视为插件级总配置
+        const ppMap = {}
+        Object.keys(allRules).forEach(function (k) {
+          if (k.indexOf(':') === -1) ppMap[k] = allRules[k]
+        })
         const pMap = {}
         function addPluginAlias(alias, plugin) {
           const key = String(alias || '').trim().toLowerCase()
@@ -519,6 +692,9 @@ const _sfc_main = defineComponent({
         })
         groups = Object.keys(map).map(function (kk) { return map[kk] })
         groups.forEach(function (g) {
+          g.pluginPolicy = ppMap[g.plugin] || null
+          g.pluginDraft = null
+          g.pluginDirty = false
           const meta = pMap[String(g.plugin).toLowerCase()] || pMap[String(g.name).toLowerCase()]
           if (meta) {
             g.iconPath = meta.iconPath; g.desc = meta.description || ''

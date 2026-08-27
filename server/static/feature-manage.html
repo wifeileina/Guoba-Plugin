@@ -202,6 +202,43 @@
     display: flex; align-items: center; gap: 10px;
   }
   .feature-msg { font-size: 12px; }
+  .pp-badge {
+    display: inline-block;
+    margin: 8px 0 0;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    background: rgba(22, 119, 255, 0.1);
+    color: var(--primary);
+  }
+  .plugin-policy {
+    grid-column: 1 / -1;
+    background: rgba(22, 119, 255, 0.05);
+    border: 1px solid rgba(22, 119, 255, 0.2);
+    border-radius: var(--radius);
+    padding: 14px;
+    box-shadow: var(--shadow);
+  }
+  .pp-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .pp-title { font-size: 14px; font-weight: 600; }
+  .pp-sub { font-size: 12px; color: var(--text-secondary); flex: 1; }
+  .pp-controls {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .pp-controls .control select, .pp-controls .control input { width: 100%; }
+  .pp-foot {
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
   .state {
     text-align: center;
     padding: 60px 20px;
@@ -256,7 +293,7 @@
     }
   } catch (e) {}
 
-  var state = { groups: [], features: [], plugins: [] }
+  var state = { groups: [], features: [], plugins: [], groupOptions: [] }
 
   function getApiBase() {
     var p = location.pathname
@@ -399,6 +436,50 @@
     return '<div class="plugin-icon">' + ch + '</div>'
   }
 
+  function normalizePolicy(value) {
+    var base = defaultPolicy()
+    var src = value || {}
+    function toList(arr) { return Array.isArray(arr) ? arr.map(Number).filter(Number.isSafeInteger) : [] }
+    var blackGroup = toList(src.blackGroup)
+    var whiteGroup = toList(src.whiteGroup)
+    if (src.mode && !blackGroup.length && !whiteGroup.length) {
+      var g = toList(src.groups)
+      if (src.mode === 'blacklist') blackGroup = g
+      else if (src.mode === 'whitelist') whiteGroup = g
+    }
+    return {
+      status: src.status === 'disabled' ? 'disabled' : base.status,
+      blackGroup: blackGroup,
+      whiteGroup: whiteGroup,
+      blackUser: toList(src.blackUser),
+      whiteUser: toList(src.whiteUser),
+      permission: ['inherit', 'all', 'admin', 'owner', 'master'].indexOf(src.permission) >= 0 ? src.permission : base.permission,
+    }
+  }
+
+  function policyEquals(a, b) {
+    var left = normalizePolicy(a)
+    var right = normalizePolicy(b)
+    return left.status === right.status &&
+      left.permission === right.permission &&
+      left.blackGroup.join(',') === right.blackGroup.join(',') &&
+      left.whiteGroup.join(',') === right.whiteGroup.join(',') &&
+      left.blackUser.join(',') === right.blackUser.join(',') &&
+      left.whiteUser.join(',') === right.whiteUser.join(',')
+  }
+
+  function buildGroupDatalist() {
+    var dl = document.getElementById('fm-group-datalist')
+    if (!dl) {
+      dl = document.createElement('datalist')
+      dl.id = 'fm-group-datalist'
+      document.body.appendChild(dl)
+    }
+    dl.innerHTML = state.groupOptions.map(function (it) {
+      return '<option value="' + esc(String(it.group_id)) + '">' + esc(String(it.group_id) + ' - ' + (it.group_name || '')) + '</option>'
+    }).join('')
+  }
+
   function renderOverview() {
     var grid = document.getElementById('overview-grid')
     grid.innerHTML = ''
@@ -412,11 +493,13 @@
     }
 
     state.groups.forEach(function (g) {
+      var pp = g.pluginPolicy && !policyEquals(g.pluginPolicy, defaultPolicy())
       var card = el('div', 'card clickable')
       card.innerHTML =
         '<div class="plugin-head">' + pluginIconHtml(g) +
         '<span class="plugin-name" title="' + (g.title || g.name) + '">' + esc(g.title || g.name) + '</span></div>' +
         '<div class="plugin-desc">' + esc(g.desc || '暂无描述') + '</div>' +
+        (pp ? '<span class="pp-badge">已设插件级配置</span>' : '') +
         '<div class="plugin-meta"><span class="author">' + esc(g.author || '未知') + '</span>' +
         '<span class="badge">' + g.features.length + ' 项功能</span></div>'
       card.addEventListener('click', function () {
@@ -437,9 +520,20 @@
     Promise.all([
       api('/feature-policy/scan').catch(function () { return [] }),
       api('/plugin/list').catch(function () { return [] }),
+      api('/feature-policy/rules').catch(function () { return {} }),
+      api('/feature-policy/groups').catch(function () { return [] }),
     ]).then(function (res) {
       var feats = res[0] || []
       var plugins = res[1] || []
+      var allRules = res[2] || {}
+      state.groupOptions = (res[3] || []).map(function (it) {
+        return { group_id: it.group_id, group_name: it.group_name || '' }
+      })
+      buildGroupDatalist()
+      var ppMap = {}
+      Object.keys(allRules).forEach(function (k) {
+        if (k.indexOf(':') === -1) ppMap[k] = allRules[k]
+      })
       var pMap = {}
       plugins.forEach(function (p) {
         pMap[String(p.name || '').toLowerCase()] = p
@@ -453,6 +547,7 @@
       })
       var groups = Object.keys(map).map(function (k) { return map[k] })
       groups.forEach(function (g) {
+        g.pluginPolicy = ppMap[g.plugin] || null
         var meta = pMap[String(g.plugin).toLowerCase()] || pMap[String(g.name).toLowerCase()]
         if (meta) {
           g.iconPath = meta.iconPath
@@ -475,7 +570,111 @@
   }
 
   function defaultPolicy() {
-    return { status: 'enabled', mode: 'blacklist', groups: [], permission: 'inherit' }
+    return { status: 'enabled', blackGroup: [], whiteGroup: [], blackUser: [], whiteUser: [], permission: 'inherit' }
+  }
+
+  function renderPluginPanel(g) {
+    var p = normalizePolicy(g.pluginPolicy || null)
+    var custom = g.pluginPolicy && !policyEquals(g.pluginPolicy, defaultPolicy())
+    var panel = el('div', 'plugin-policy')
+    panel.innerHTML =
+      '<div class="pp-head"><span class="pp-title">插件总配置</span>' +
+      '<span class="pp-sub">应用于本插件所有功能，单个功能配置可覆盖此配置</span></div>' +
+      '<div class="pp-controls">' +
+      '<div class="control"><label>状态</label><select data-pp="status">' +
+      '<option value="enabled">启用</option><option value="disabled">停用</option></select></div>' +
+      '<div class="control"><label>黑名单群（逗号分隔，留空=不限）</label><input data-pp="blackGroup" list="fm-group-datalist" placeholder="黑名单群号，输入检索选择"></div>' +
+      '<div class="control"><label>白名单群（逗号分隔，留空=不限）</label><input data-pp="whiteGroup" list="fm-group-datalist" placeholder="白名单群号，输入检索选择"></div>' +
+      '<div class="control"><label>黑名单用户（逗号分隔，留空=不限）</label><input data-pp="blackUser" placeholder="黑名单QQ，逗号分隔"></div>' +
+      '<div class="control"><label>白名单用户（逗号分隔，留空=不限）</label><input data-pp="whiteUser" placeholder="白名单QQ，逗号分隔"></div>' +
+      '<div class="control"><label>权限</label><select data-pp="permission">' +
+      '<option value="inherit">继承原权限</option><option value="all">所有人</option>' +
+      '<option value="admin">群管理员</option><option value="owner">群主</option>' +
+      '<option value="master">机器人主人</option></select></div>' +
+      '</div>' +
+      '<div class="pp-foot">' +
+      '<button class="btn btn-primary" data-ppact="save">保存</button>' +
+      '<button class="btn btn-danger" data-ppact="reset">恢复默认</button>' +
+      '<span class="feature-msg" data-ppmsg="1"></span>' +
+      '</div>'
+    setPluginPanel(panel, g.pluginDraft || g.pluginPolicy || null)
+    return panel
+  }
+
+  function policyFromPanel(panel) {
+    function toList(name) {
+      return String(panel.querySelector('[data-pp="' + name + '"]').value || '')
+        .split(',').map(function (x) { return x.trim() }).filter(Boolean).map(Number)
+    }
+    return normalizePolicy({
+      status: panel.querySelector('[data-pp="status"]').value,
+      blackGroup: toList('blackGroup'),
+      whiteGroup: toList('whiteGroup'),
+      blackUser: toList('blackUser'),
+      whiteUser: toList('whiteUser'),
+      permission: panel.querySelector('[data-pp="permission"]').value,
+    })
+  }
+
+  function setPluginPanel(panel, policy) {
+    var v = normalizePolicy(policy)
+    panel.querySelector('[data-pp="status"]').value = v.status
+    panel.querySelector('[data-pp="blackGroup"]').value = v.blackGroup.join(',')
+    panel.querySelector('[data-pp="whiteGroup"]').value = v.whiteGroup.join(',')
+    panel.querySelector('[data-pp="blackUser"]').value = v.blackUser.join(',')
+    panel.querySelector('[data-pp="whiteUser"]').value = v.whiteUser.join(',')
+    panel.querySelector('[data-pp="permission"]').value = v.permission
+  }
+
+  function markPluginDraft(g) {
+    var panel = document.querySelector('.plugin-policy')
+    if (!panel) return
+    g.pluginDraft = policyFromPanel(panel)
+    g.pluginDirty = !policyEquals(g.pluginDraft, g.pluginPolicy || defaultPolicy())
+  }
+
+  function savePluginPolicy(g) {
+    var panel = document.querySelector('.plugin-policy')
+    if (!panel) return Promise.resolve()
+    var body = policyFromPanel(panel)
+    var btn = panel.querySelector('[data-ppact="save"]')
+    var msgEl = panel.querySelector('[data-ppmsg="1"]')
+    if (btn) { btn.disabled = true; btn.textContent = '保存中…' }
+    var req = policyEquals(body, defaultPolicy())
+      ? api('/feature-policy/rules/' + encodeURIComponent(g.plugin), { method: 'DELETE' })
+      : api('/feature-policy/rules/' + encodeURIComponent(g.plugin), { method: 'PUT', body: body })
+    return req.then(function () {
+      g.pluginPolicy = policyEquals(body, defaultPolicy()) ? null : body
+      g.pluginDraft = null
+      g.pluginDirty = false
+      if (msgEl) { msgEl.textContent = '已保存'; msgEl.style.color = '#22c55e' }
+    }).catch(function (e) {
+      if (msgEl) { msgEl.textContent = (e && e.message) || '保存失败'; msgEl.style.color = '#f5222d' }
+      throw e
+    }).finally(function () {
+      if (btn) { btn.disabled = false; btn.textContent = '保存' }
+    })
+  }
+
+  function resetPluginPolicy(g) {
+    var panel = document.querySelector('.plugin-policy')
+    if (!panel) return Promise.resolve()
+    setPluginPanel(panel, defaultPolicy())
+    markPluginDraft(g)
+    return savePluginPolicy(g)
+  }
+
+  function bindPluginPanel(g) {
+    var panel = document.querySelector('.plugin-policy')
+    if (!panel) return
+    Array.prototype.forEach.call(panel.querySelectorAll('[data-pp]'), function (ctl) {
+      ctl.addEventListener('input', function () { markPluginDraft(g) })
+      ctl.addEventListener('change', function () { markPluginDraft(g) })
+    })
+    var save = panel.querySelector('[data-ppact="save"]')
+    if (save) save.addEventListener('click', function () { savePluginPolicy(g) })
+    var reset = panel.querySelector('[data-ppact="reset"]')
+    if (reset) reset.addEventListener('click', function () { resetPluginPolicy(g) })
   }
 
   function renderDetail(key) {
@@ -489,6 +688,11 @@
     document.getElementById('detail-title').textContent = (meta && meta.title) || key
     document.getElementById('detail-subtitle').textContent = list.length + ' 项功能'
 
+    var g = state.groups.find(function (x) { return x.plugin === key }) || { plugin: key, features: [] }
+    buildGroupDatalist()
+    grid.appendChild(renderPluginPanel(g))
+    bindPluginPanel(g)
+
     if (list.length === 0) {
       grid.appendChild(el('div', 'state', '该插件暂无功能'))
       return
@@ -497,7 +701,10 @@
     list.forEach(function (f) {
       var policy = Object.assign(defaultPolicy(), f.policy || {})
       f._policy = policy
-      f._groupsInput = (policy.groups || []).join(',')
+      f._blackGroupInput = (policy.blackGroup || []).join(',')
+      f._whiteGroupInput = (policy.whiteGroup || []).join(',')
+      f._blackUserInput = (policy.blackUser || []).join(',')
+      f._whiteUserInput = (policy.whiteUser || []).join(',')
 
       var card = el('div', 'card')
       var permText = { inherit: '继承原权限', all: '所有人', admin: '群管理员', owner: '群主', master: '机器人主人' }[policy.permission] || policy.permission
@@ -513,9 +720,10 @@
         '<div class="controls">' +
         '<div class="control"><label>状态</label><select data-field="status">' +
         '<option value="enabled">启用</option><option value="disabled">停用</option></select></div>' +
-        '<div class="control"><label>名单模式</label><select data-field="mode">' +
-        '<option value="blacklist">群黑名单</option><option value="whitelist">群白名单</option></select></div>' +
-        '<div class="control"><label>群号（逗号分隔，留空=不限）</label><input data-field="groups" placeholder="群号，逗号分隔"></div>' +
+        '<div class="control"><label>黑名单群（逗号分隔，留空=不限）</label><input data-field="blackGroup" list="fm-group-datalist" placeholder="黑名单群号，输入检索选择"></div>' +
+        '<div class="control"><label>白名单群（逗号分隔，留空=不限）</label><input data-field="whiteGroup" list="fm-group-datalist" placeholder="白名单群号，输入检索选择"></div>' +
+        '<div class="control"><label>黑名单用户（逗号分隔，留空=不限）</label><input data-field="blackUser" placeholder="黑名单QQ，逗号分隔"></div>' +
+        '<div class="control"><label>白名单用户（逗号分隔，留空=不限）</label><input data-field="whiteUser" placeholder="白名单QQ，逗号分隔"></div>' +
         '<div class="control"><label>权限</label><select data-field="permission">' +
         '<option value="inherit">继承原权限</option><option value="all">所有人</option>' +
         '<option value="admin">群管理员</option><option value="owner">群主</option>' +
@@ -528,12 +736,16 @@
         '</div>'
 
       var selStatus = card.querySelector('[data-field="status"]')
-      var selMode = card.querySelector('[data-field="mode"]')
-      var inpGroups = card.querySelector('[data-field="groups"]')
+      var inpBlackGroup = card.querySelector('[data-field="blackGroup"]')
+      var inpWhiteGroup = card.querySelector('[data-field="whiteGroup"]')
+      var inpBlackUser = card.querySelector('[data-field="blackUser"]')
+      var inpWhiteUser = card.querySelector('[data-field="whiteUser"]')
       var selPerm = card.querySelector('[data-field="permission"]')
       selStatus.value = policy.status
-      selMode.value = policy.mode
-      inpGroups.value = f._groupsInput
+      inpBlackGroup.value = f._blackGroupInput
+      inpWhiteGroup.value = f._whiteGroupInput
+      inpBlackUser.value = f._blackUserInput
+      inpWhiteUser.value = f._whiteUserInput
       selPerm.value = policy.permission
 
       var msgEl = card.querySelector('.feature-msg')
@@ -545,8 +757,10 @@
       card.querySelector('[data-act="save"]').addEventListener('click', function () {
         var body = {
           status: selStatus.value,
-          mode: selMode.value,
-          groups: String(inpGroups.value || '').split(',').map(function (x) { return x.trim() }).filter(Boolean).map(Number),
+          blackGroup: String(inpBlackGroup.value || '').split(',').map(function (x) { return x.trim() }).filter(Boolean).map(Number),
+          whiteGroup: String(inpWhiteGroup.value || '').split(',').map(function (x) { return x.trim() }).filter(Boolean).map(Number),
+          blackUser: String(inpBlackUser.value || '').split(',').map(function (x) { return x.trim() }).filter(Boolean).map(Number),
+          whiteUser: String(inpWhiteUser.value || '').split(',').map(function (x) { return x.trim() }).filter(Boolean).map(Number),
           permission: selPerm.value,
         }
         var btn = card.querySelector('[data-act="save"]')
@@ -564,8 +778,10 @@
         api('/feature-policy/rules/' + encodeURIComponent(f.key), { method: 'DELETE' })
           .then(function () {
             selStatus.value = 'enabled'
-            selMode.value = 'blacklist'
-            inpGroups.value = ''
+            inpBlackGroup.value = ''
+            inpWhiteGroup.value = ''
+            inpBlackUser.value = ''
+            inpWhiteUser.value = ''
             selPerm.value = 'inherit'
             setMsg('已恢复默认', '#22c55e')
           })
@@ -582,9 +798,27 @@
     Promise.all([
       api('/feature-policy/scan').catch(function () { return [] }),
       api('/plugin/list').catch(function () { return [] }),
+      api('/feature-policy/rules').catch(function () { return {} }),
+      api('/feature-policy/groups').catch(function () { return [] }),
     ]).then(function (res) {
       state.features = res[0] || []
       state.plugins = res[1] || []
+      state.groupOptions = (res[3] || []).map(function (it) {
+        return { group_id: it.group_id, group_name: it.group_name || '' }
+      })
+      var allRules = res[2] || {}
+      var ppMap = {}
+      Object.keys(allRules).forEach(function (k) {
+        if (k.indexOf(':') === -1) ppMap[k] = allRules[k]
+      })
+      var map = {}
+      state.features.forEach(function (f) {
+        var k = f.plugin || f.pluginName
+        var g = map[k] || (map[k] = { plugin: k, name: f.pluginName || k, features: [] })
+        g.features.push(f)
+      })
+      state.groups = Object.keys(map).map(function (kk) { return map[kk] })
+      state.groups.forEach(function (g) { g.pluginPolicy = ppMap[g.plugin] || null })
       showView('view-detail')
       renderDetail(key)
     }).catch(function (e) {
